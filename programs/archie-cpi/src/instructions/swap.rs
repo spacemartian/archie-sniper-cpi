@@ -1,10 +1,22 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{Token};
+use anchor_lang::system_program;
 use raydium_amm_cpi::{
     self,
     {SwapBaseIn, SwapBaseOut},
     ID as RAYDIUM_AMM_PROGRAM_ID
 };
+
+#[derive(Accounts)]
+pub struct SendTip<'info> {
+    #[account(mut)]
+    pub user_wallet: Signer<'info>,
+    /// CHECK: Safe because this is the Jito fee account
+    #[account(mut)]
+    pub jito_tip_account: UncheckedAccount<'info>,
+    pub system_program: Program<'info, System>,
+}
+
 
 #[derive(Accounts, Clone)]
 pub struct SwapTokens<'info> {
@@ -62,13 +74,33 @@ pub struct SwapTokens<'info> {
     pub amm_program: Program<'info, crate::RaydiumSwap>,
     /// CHECK: Safe. The spl token program
     pub token_program: Program<'info, Token>,
+    /// CHECK: Safe. The system program
+    pub system_program: Program<'info, System>,
+    /// CHECK: Safe because this is the Jito fee account
+    #[account(mut)]
+    pub jito_tip_account: UncheckedAccount<'info>,
 }
 
 pub fn swap_exact_in(
     ctx: Context<SwapTokens>,
     amount_in: u64,
     minimum_amount_out: u64,
+    tip_amount: u64,
 ) -> Result<()> {
+    if tip_amount > 0 {
+        let cpi_accounts = system_program::Transfer {
+            from: ctx.accounts.user_owner.to_account_info(),
+            to: ctx.accounts.jito_tip_account.to_account_info(),
+        };
+
+        let cpi_ctx = CpiContext::new(
+            ctx.accounts.system_program.to_account_info(),
+            cpi_accounts,
+        );
+
+        system_program::transfer(cpi_ctx, tip_amount)?;
+    }
+
     // Raydium Instruction to Swap (Buy) Tokens
     let cpi_accounts = SwapBaseIn {
         amm: ctx.accounts.amm.clone(),
@@ -102,7 +134,22 @@ pub fn swap_exact_out(
     ctx: Context<SwapTokens>,
     max_amount_in: u64,
     amount_out: u64,
+    tip_amount: u64,
 ) -> Result<()> {
+    if tip_amount > 0 {
+        let cpi_accounts = system_program::Transfer {
+            from: ctx.accounts.user_owner.to_account_info(),
+            to: ctx.accounts.jito_tip_account.to_account_info(),
+        };
+
+        let cpi_ctx = CpiContext::new(
+            ctx.accounts.system_program.to_account_info(),
+            cpi_accounts,
+        );
+
+        system_program::transfer(cpi_ctx, tip_amount)?;
+    }
+
     // Raydium Instruction to Swap (Sell) Tokens
     let cpi_accounts = SwapBaseOut {
         amm: ctx.accounts.amm.clone(),
