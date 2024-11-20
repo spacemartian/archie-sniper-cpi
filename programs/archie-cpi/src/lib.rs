@@ -17,4 +17,8 @@ pub mod pump {
     pub fn raydium_swap_token_out(ctx: Context<SwapTokens>, max_amount_in: u64, amount_out: u64, tip_amount: u64) -> Result<()> {
         instructions::swap_exact_out(ctx, max_amount_in, amount_out, tip_amount)
     }
+
+    pub fn pump_fun_buy_token(ctx: Context<BuyPumpToken>, amount_sol: f64, slippage: f64) -> Result<()> {
+        instructions::buy_pump_tokens(ctx, amount_sol, slippage)
+    }
 }
