@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{Token};
 use anchor_spl::associated_token::{self, AssociatedToken};
-
+use crate::constants::*;
 
     
 // Pump.fun Program
@@ -9,12 +9,6 @@ pub static ID: Pubkey = pubkey!("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P");
 pub static GLOBAL: Pubkey = pubkey!("4wTV1YmiEkRvAtNtsSGPtUrqRYQMe5SKy2uB4Jjaxnjf");
 pub static EVENT_AUTHORITY: Pubkey = pubkey!("Ce6TQqeHC9p8KetsN6JsjHK7UTZk7nasjjnr7XxXp9F1");
 pub static FEE: Pubkey = pubkey!("CebN5WGQ4jvEPvsVU4EoHEpgzq1VV7AbicfhtW4xC9iM");
-
-// Constants
-pub const BUY_DISCRIMINATOR: u64 = 16927863322537952870;
-pub const BONDING_CURVE_DISCRIMINATOR: u64 = 6966180631402821399;
-pub const TOKEN_DECIMALS: u8 = 6;
-pub const LAMPORTS_PER_SOL: u64 = 1_000_000_000;
 
 #[derive(Debug)]
 pub struct BondingCurveState {
