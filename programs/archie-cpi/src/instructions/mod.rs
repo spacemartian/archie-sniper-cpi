@@ -1,5 +1,5 @@
-pub mod swap;
+pub mod swap_base;
 pub mod pump;
 
-pub use swap::*;
+pub use swap_base::*;
 pub use pump::*;

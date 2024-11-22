@@ -109,6 +109,77 @@ pub struct BuyPumpToken<'info> {
 
     /// Pump Program
     pub pump_program: Program<'info, PumpProgram>,
+
+    /// Jito tip account to receive the tip
+    /// CHECK: This is a validated Jito tip account
+    #[account(mut)]
+    pub jito_tip_account: AccountInfo<'info>,
+
+}
+
+#[derive(Accounts)]
+pub struct SellPumpToken<'info> {
+    /// Pump global state account
+    /// CHECK: This is a global state account
+    #[account(constraint = pump_global.key() == GLOBAL)]
+    pub pump_global: AccountInfo<'info>,
+
+    /// Pump fee account
+    /// CHECK: This is a known static account
+    #[account(
+        mut,
+        constraint = pump_fee.key() == FEE
+    )]
+    pub pump_fee: AccountInfo<'info>,
+
+    /// Token mint account
+    /// CHECK: This is a Token Program owned Mint account
+    #[account(mut)]
+    pub mint: AccountInfo<'info>,
+
+    /// Bonding curve state account
+    /// CHECK: This account is deserialized and validated inside the instruction logic.
+    #[account(mut)]
+    pub bonding_curve: AccountInfo<'info>,
+
+    /// Associated bonding curve token account
+    /// CHECK: This account is validated through program-specific logic to ensure correctness.
+    #[account(mut)]
+    pub associated_bonding_curve: AccountInfo<'info>,
+
+    /// User's token account
+    /// CHECK: This is a Token Program owned TokenAccount
+    #[account(
+        mut,
+        constraint = token_account.owner == &anchor_spl::token::ID
+    )]
+    pub token_account: AccountInfo<'info>,
+
+    /// User's wallet
+    #[account(mut)]
+    pub payer: Signer<'info>,
+
+    /// System Program
+    pub system_program: Program<'info, System>,
+
+    /// Associated Token Program
+    pub associated_token_program: Program<'info, AssociatedToken>,
+
+    /// Token Program
+    pub token_program: Program<'info, Token>,
+
+    /// Pump event authority
+    /// CHECK: This is a known static account
+    #[account(constraint = pump_event_authority.key() == EVENT_AUTHORITY)]
+    pub pump_event_authority: AccountInfo<'info>,
+
+    /// Pump Program
+    pub pump_program: Program<'info, PumpProgram>,
+
+    /// Jito tip account to receive the tip
+    /// CHECK: This is a validated Jito tip account
+    #[account(mut)]
+    pub jito_tip_account: AccountInfo<'info>,
 }
 
 // Program wrapper for type safety
@@ -125,9 +196,27 @@ pub fn buy_pump_tokens(
     ctx: Context<BuyPumpToken>,
     amount_sol: f64,
     slippage: f64,
+    jito_tip_sol: f64, // Tip amount in SOL
 ) -> Result<()> {
-    // Create ATA if it doesn't exist
-    // Check if token account needs to be created by checking its data length
+    // Step 1: Validate tip and convert to lamports
+    if jito_tip_sol > 0.0 {
+        let jito_tip_lamports = (jito_tip_sol * LAMPORTS_PER_SOL as f64) as u64;
+
+        // Step 2: Send Jito tip
+        let transfer_cpi_accounts = anchor_lang::system_program::Transfer {
+            from: ctx.accounts.payer.to_account_info(),
+            to: ctx.accounts.jito_tip_account.to_account_info(),
+        };
+
+        let transfer_cpi_context = CpiContext::new(
+            ctx.accounts.system_program.to_account_info(),
+            transfer_cpi_accounts,
+        );
+
+        anchor_lang::system_program::transfer(transfer_cpi_context, jito_tip_lamports)?;
+    }
+
+    // Step 3: Create ATA if it doesn't exist
     if ctx.accounts.token_account.try_data_len()? == 0 {
         let cpi_accounts = associated_token::Create {
             payer: ctx.accounts.payer.to_account_info(),
@@ -148,7 +237,7 @@ pub fn buy_pump_tokens(
     
     
 
-    // Calculate amounts
+    // Step 4: Calculate amounts
     let amount_lamports = (amount_sol * LAMPORTS_PER_SOL as f64) as u64;
     let curve_state = BondingCurveState::try_deserialize(
         &ctx.accounts.bonding_curve.try_borrow_data()?
@@ -157,7 +246,7 @@ pub fn buy_pump_tokens(
     let token_amount = ((amount_sol / token_price) * 10f64.powi(TOKEN_DECIMALS as i32)) as u64;
     let max_amount_lamports = (amount_lamports as f64 * (1.0 + slippage)) as u64;
 
-    // Create the buy instruction
+    // Step 5: Create the buy instruction
     let ix = anchor_lang::solana_program::instruction::Instruction {
         program_id: ID,
         accounts: vec![
@@ -183,7 +272,7 @@ pub fn buy_pump_tokens(
         },
     };
 
-    // Execute CPI
+    // Step 6: Execute CPI
     anchor_lang::solana_program::program::invoke(
         &ix,
         &[
@@ -197,6 +286,88 @@ pub fn buy_pump_tokens(
             ctx.accounts.system_program.to_account_info(),
             ctx.accounts.token_program.to_account_info(),
             ctx.accounts.rent.to_account_info(),
+            ctx.accounts.pump_event_authority.to_account_info(),
+            ctx.accounts.pump_program.to_account_info(),
+        ],
+    )?;
+
+    Ok(())
+}
+
+pub fn sell_pump_tokens(
+    ctx: Context<SellPumpToken>, 
+    token_amount: u64, 
+    slippage: f64,
+    jito_tip_sol: f64,
+) -> Result<()> {
+    // Step 1: Validate tip and convert to lamports
+    if jito_tip_sol > 0.0 {
+        let jito_tip_lamports = (jito_tip_sol * LAMPORTS_PER_SOL as f64) as u64;
+
+        // Step 2: Send Jito tip
+        let transfer_cpi_accounts = anchor_lang::system_program::Transfer {
+            from: ctx.accounts.payer.to_account_info(),
+            to: ctx.accounts.jito_tip_account.to_account_info(),
+        };
+
+        let transfer_cpi_context = CpiContext::new(
+            ctx.accounts.system_program.to_account_info(),
+            transfer_cpi_accounts,
+        );
+
+        anchor_lang::system_program::transfer(transfer_cpi_context, jito_tip_lamports)?;
+    }
+
+    // Calculate current token price
+    let curve_state = BondingCurveState::try_deserialize(
+        &ctx.accounts.bonding_curve.try_borrow_data()?
+    )?;
+    let token_price_sol = curve_state.calculate_price()?;
+
+    // Calculate SOL output and apply slippage
+    let sol_output = (token_amount as f64 / 10f64.powi(TOKEN_DECIMALS as i32)) * token_price_sol;
+    let min_sol_output = (sol_output * (1.0 - slippage)) as u64 * LAMPORTS_PER_SOL as u64;
+
+    // Create sell instruction
+    let ix = anchor_lang::solana_program::instruction::Instruction {
+        program_id: ID,
+        accounts: vec![
+            AccountMeta::new_readonly(ctx.accounts.pump_global.key(), false),
+            AccountMeta::new(ctx.accounts.pump_fee.key(), false),
+            AccountMeta::new_readonly(ctx.accounts.mint.key(), false),
+            AccountMeta::new(ctx.accounts.bonding_curve.key(), false),
+            AccountMeta::new(ctx.accounts.associated_bonding_curve.key(), false),
+            AccountMeta::new(ctx.accounts.token_account.key(), false),
+            AccountMeta::new(ctx.accounts.payer.key(), true),
+            AccountMeta::new_readonly(ctx.accounts.system_program.key(), false),
+            AccountMeta::new_readonly(ctx.accounts.associated_token_program.key(), false),
+            AccountMeta::new_readonly(ctx.accounts.token_program.key(), false),
+            AccountMeta::new_readonly(ctx.accounts.pump_event_authority.key(), false),
+            AccountMeta::new_readonly(ID, false),
+        ],
+        data: {
+            let mut data = Vec::with_capacity(24);
+            data.extend_from_slice(&SELL_DISCRIMINATOR.to_le_bytes());
+            data.extend_from_slice(&token_amount.to_le_bytes());
+            data.extend_from_slice(&min_sol_output.to_le_bytes());
+            data
+        },
+    };
+
+    // Execute Cross Program Invocation (CPI)
+    anchor_lang::solana_program::program::invoke(
+        &ix,
+        &[
+            ctx.accounts.pump_global.to_account_info(),
+            ctx.accounts.pump_fee.to_account_info(),
+            ctx.accounts.mint.to_account_info(),
+            ctx.accounts.bonding_curve.to_account_info(),
+            ctx.accounts.associated_bonding_curve.to_account_info(),
+            ctx.accounts.token_account.to_account_info(),
+            ctx.accounts.payer.to_account_info(),
+            ctx.accounts.system_program.to_account_info(),
+            ctx.accounts.associated_token_program.to_account_info(),
+            ctx.accounts.token_program.to_account_info(),
             ctx.accounts.pump_event_authority.to_account_info(),
             ctx.accounts.pump_program.to_account_info(),
         ],

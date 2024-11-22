@@ -11,12 +11,20 @@ declare_id!("81JFbU5xub73UmkJFgUG2KTDLvtx9o7Kq8iK3hJFnEn9");
 pub mod pump {
     use super::*;
 
-    pub fn raydium_swap_token_in(ctx: Context<SwapTokens>, amount_in: u64, minimum_amount_out: u64, jito_tip_sol: f64) -> Result<()> {
-        instructions::swap_exact_in(ctx, amount_in, minimum_amount_out, jito_tip_sol)
+    // pub fn raydium_swap_token_in(ctx: Context<ProxySwapBaseIn>, amount_in: u64, minimum_amount_out: u64, jito_tip_sol: f64) -> Result<()> {
+    //     instructions::swap_base_in(ctx, amount_in, minimum_amount_out, jito_tip_sol)
+    // }
+
+    // pub fn raydium_swap_token_out(ctx: Context<ProxySwapBaseOut>, max_amount_in: u64, amount_out: u64, jito_tip_sol: f64) -> Result<()> {
+    //     instructions::swap_base_out(ctx, max_amount_in, amount_out, jito_tip_sol)
+    // }
+
+    pub fn proxy_swap_base_input(ctx: Context<ProxySwapBaseInput>, amount_in: u64, minimum_amount_out: u64) -> Result<()> {
+        instructions::proxy_swap_base_input(ctx, amount_in, minimum_amount_out)
     }
 
-    pub fn raydium_swap_token_out(ctx: Context<SwapTokens>, max_amount_in: u64, amount_out: u64, jito_tip_sol: f64) -> Result<()> {
-        instructions::swap_exact_out(ctx, max_amount_in, amount_out, jito_tip_sol)
+    pub fn proxy_swap_base_output(ctx: Context<ProxySwapBaseOutput>, max_amount_in: u64, amount_out: u64) -> Result<()> {
+        instructions::proxy_swap_base_output(ctx, max_amount_in, amount_out)
     }
 
     pub fn pump_fun_buy_token(ctx: Context<BuyPumpToken>, amount_sol: f64, slippage: f64, jito_tip_sol: f64) -> Result<()> {

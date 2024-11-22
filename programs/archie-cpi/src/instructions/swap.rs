@@ -1,6 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{Token};
 use anchor_lang::system_program;
+use crate::constants::LAMPORTS_PER_SOL;
 use raydium_amm_cpi::{
     self,
     {SwapBaseIn, SwapBaseOut},
@@ -85,9 +86,11 @@ pub fn swap_exact_in(
     ctx: Context<SwapTokens>,
     amount_in: u64,
     minimum_amount_out: u64,
-    tip_amount: u64,
+    jito_tip_sol: f64,
 ) -> Result<()> {
-    if tip_amount > 0 {
+    if jito_tip_sol > 0.0 {
+        let jito_tip_lamports = (jito_tip_sol * LAMPORTS_PER_SOL as f64) as u64;
+
         let cpi_accounts = system_program::Transfer {
             from: ctx.accounts.user_owner.to_account_info(),
             to: ctx.accounts.jito_tip_account.to_account_info(),
@@ -98,7 +101,7 @@ pub fn swap_exact_in(
             cpi_accounts,
         );
 
-        system_program::transfer(cpi_ctx, tip_amount)?;
+        system_program::transfer(cpi_ctx, jito_tip_lamports)?;
     }
 
     // Raydium Instruction to Swap (Buy) Tokens
@@ -134,9 +137,11 @@ pub fn swap_exact_out(
     ctx: Context<SwapTokens>,
     max_amount_in: u64,
     amount_out: u64,
-    tip_amount: u64,
+    jito_tip_sol: f64,
 ) -> Result<()> {
-    if tip_amount > 0 {
+    if jito_tip_sol > 0.0 {
+        let jito_tip_lamports = (jito_tip_sol * LAMPORTS_PER_SOL as f64) as u64;
+
         let cpi_accounts = system_program::Transfer {
             from: ctx.accounts.user_owner.to_account_info(),
             to: ctx.accounts.jito_tip_account.to_account_info(),
@@ -147,7 +152,7 @@ pub fn swap_exact_out(
             cpi_accounts,
         );
 
-        system_program::transfer(cpi_ctx, tip_amount)?;
+        system_program::transfer(cpi_ctx, jito_tip_lamports)?;
     }
 
     // Raydium Instruction to Swap (Sell) Tokens
